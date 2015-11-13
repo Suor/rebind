@@ -2,7 +2,7 @@ import ast
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
     map, split, walk_keys, zipdict, merge, join, project, flip,
-    post_processing, unwrap, memoize, none
+    post_processing, unwrap, memoize, none, partial
 )
 
 
@@ -44,7 +44,8 @@ def rebind(func, bindings):
     local_bindings.update(rebound_closure)
 
     # Compile and rebind enclosed values
-    return compile_func(func, tree, local_bindings)
+    func = compile_func(func, tree, local_bindings)
+    return partial(func, **project(local_bindings, get_kwargnames(func)))
 
 
 @post_processing(dict)
@@ -105,11 +106,13 @@ def import_func(full_name):
 
 def get_defaults(func):
     func = unwrap(func)
+    return zipdict(get_kwargnames(func), func.__defaults__ or ())
+
+def get_kwargnames(func):
     if not func.__defaults__:
-        return {}
+        return ()
     argnames = func.__code__.co_varnames[:func.__code__.co_argcount]
-    kwargnames = argnames[len(argnames) - len(func.__defaults__):]
-    return zipdict(kwargnames, func.__defaults__)
+    return argnames[len(argnames) - len(func.__defaults__):]
 
 
 # Introspect assignments

@@ -16,6 +16,7 @@ def test_lookup():
 
 def test_rebind():
     assert rebind(f, {'example.f.k': 11})(0, 0) == 11
+    assert rebind(f, {'example.f.n': 2})(0, 2) == 14
     assert rebind(h, {'example.h.beta': 18})(1) == 18
     assert rebind(h, {})(1) == 17
     assert rebind(g, {'example.f.k': 11, 'example.g.alpha': 43})(0) == 54
