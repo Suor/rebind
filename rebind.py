@@ -146,6 +146,10 @@ def is_literal(node):
 
 
 def ast_eval(node):
+    """
+    Faster ast.literal_eval() with better error messages.
+    Works only with nodes not strings.
+    """
     if isinstance(node, ast.Num):
         return node.n
     elif isinstance(node, ast.Str):
