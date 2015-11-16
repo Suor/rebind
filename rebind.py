@@ -1,8 +1,9 @@
 import ast
+from itertools import count
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
     map, split, walk_keys, zipdict, merge, join, project, flip,
-    post_processing, unwrap, memoize, none, partial
+    post_processing, unwrap, memoize, none
 )
 
 
@@ -33,11 +34,11 @@ def rebind(func, bindings):
 
     tree = get_ast(func)
 
-    # Rebind assignments
+    # Rebind assignments and kwarg defaults
     prefix = _full_name(func) + '.'
     my_bindings, other_bindings = split_keys(lambda s: s.startswith(prefix), bindings)
     local_bindings = walk_keys(lambda s: s[len(prefix):], my_bindings)
-    tree = AssignRewriter(local_bindings).visit(tree)
+    tree = ConstRewriter(local_bindings).visit(tree)
 
     # Recurse
     closure = get_closure(func)
@@ -45,9 +46,7 @@ def rebind(func, bindings):
                        if callable(f) and f is not func}
     local_bindings.update(rebound_closure)
 
-    # Compile and rebind enclosed values
-    func = compile_func(func, tree, local_bindings)
-    return partial(func, **project(local_bindings, get_kwargnames(func)))
+    return compile_func(func, tree, local_bindings)
 
 
 @post_processing(dict)
@@ -59,7 +58,7 @@ def _local_bindings(func, bindings):
             yield spec_var, value
 
 
-class AssignRewriter(ast.NodeTransformer):
+class ConstRewriter(ast.NodeTransformer):
     def __init__(self, bindings):
         self.bindings = bindings
 
@@ -75,6 +74,13 @@ class AssignRewriter(ast.NodeTransformer):
             raise NotImplementedError('Rebinding in mass assignment is not supported')
 
         node.value = literal_to_ast(self.bindings[node.targets[0].id])
+        return node
+
+    def visit_arguments(self, node):
+        kwargs = node.args[len(node.args)-len(node.defaults):]
+        for i, kwarg, default in zip(count(), kwargs, node.defaults):
+            if kwarg.id in self.bindings:
+                node.defaults[i] = literal_to_ast(self.bindings[kwarg.id])
         return node
 
 
