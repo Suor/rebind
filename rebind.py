@@ -28,6 +28,8 @@ def lookup(func):
 def rebind(func, bindings):
     if not bindings:
         return func
+    if isinstance(func, str):
+        func = import_func(func)
 
     tree = get_ast(func)
 
