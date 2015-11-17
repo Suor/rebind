@@ -25,3 +25,13 @@ def f3(x):
         return f2(x-1) * l
     else:
         return 1
+
+
+class A(object):
+    def __init__(self, x):
+        h = 3
+        self.prop = h * x
+
+
+def a(x):
+    return A(1).prop

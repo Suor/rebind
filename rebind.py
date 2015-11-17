@@ -16,6 +16,10 @@ def introspect(func):
     if isinstance(func, str):
         func = import_func(func)
 
+    if isinstance(func, type):
+        methods = inspect.getmembers(func, predicate=inspect.ismethod)
+        return join(introspect(meth) for _, meth in methods)
+
     func_name = _full_name(func)
     consts = merge(get_defaults(func), get_assignments(func))
     consts_spec = walk_keys(lambda k: '%s.%s' % (func_name, k), consts)
@@ -92,9 +96,7 @@ def _get_refs(func):
             if hasattr(f, '__module__') and hasattr(f, '__name__')}
 
 def _get_deps(value):
-    if isinstance(value, type):
-        raise NotImplementedError('Classes are not supported')
-    elif callable(value):
+    if callable(value):
         closure = get_closure(value)
         return {f.__module__ for f in closure if hasattr(f, '__module__')} \
             | {m.__name__ for m in closure if inspect.ismodule(m)}
@@ -151,6 +153,7 @@ class ConstRewriter(ast.NodeTransformer):
         node = self.generic_visit(node)
         self.pop_scope()
         return node
+    visit_ClassDef = visit_FunctionDef
 
     def visit_Assign(self, node):
         if not is_literal(node.value):
@@ -180,7 +183,10 @@ from importlib import import_module
 
 
 def _full_name(func):
-    return '%s.%s' % (func.__module__, func.__name__)
+    if hasattr(func, 'im_class'):
+        return '%s.%s.%s' % (func.__module__, func.im_class.__name__, func.__name__)
+    else:
+        return '%s.%s' % (func.__module__, func.__name__)
 
 def import_func(full_name):
     module_name, func_name = full_name.rsplit('.', 1)
@@ -284,14 +290,15 @@ def get_ast(func):
     source = textwrap.dedent(source)
 
     # Preserve line numbers
-    source = '\n' * (func.__code__.co_firstlineno - 2) + source
+    if hasattr(func, '__code__'):
+        source = '\n' * (func.__code__.co_firstlineno - 2) + source
+    elif hasattr(func, '__init__'):
+        source = '\n' * (func.__init__.im_func.__code__.co_firstlineno - 3) + source
+
     return ast.parse(source, func_file(func), 'single').body[0]
 
 def func_file(func):
     return getattr(sys.modules[func.__module__], '__file__', '<nofile>')
-
-def is_name(node, name):
-    return isinstance(node, ast.Name) and node.id == name
 
 
 # Introspect enclosed
@@ -306,6 +313,10 @@ def _code_names(code):
     return names
 
 def get_closure(func):
+    if isinstance(func, type):
+        methods = inspect.getmembers(func, predicate=inspect.ismethod)
+        return join(get_closure(meth.im_func) for _, meth in methods)
+
     code = Code.from_code(func.__code__)
     names = _code_names(code)
     return project(func.__globals__, names)
