@@ -26,8 +26,8 @@ Introspect constants:
     assert introspect(f) == {'example.f.n': 1, 'example.f.k': 10}
     assert introspect('example.f') == {'example.f.n': 1, 'example.f.k': 10}
     assert introspect(g) == {'example.f.n': 1, 'example.f.k': 10,
-                             'example.g.alpha': 42, 'example.g.f': f}
-    assert introspect(h) == {'example.h.beta': 17}
+                             'example.g.alpha': 42, 'example.f': f}
+    assert introspect(h) == {'example.beta': 17}
 
 
 Rebind on the fly:
@@ -38,7 +38,7 @@ Rebind on the fly:
     f20 = rebind('example.f', {'example.f.k': 20})
 
     # Rebind enclosed constant
-    h_beta_18 = rebind(h, {'example.h.beta': 18})
+    h_beta_18 = rebind(h, {'example.beta': 18})
 
     # Recursively rebind g and f
     g2 = rebind(g, {'example.f.k': 11, 'example.g.alpha': 43})
