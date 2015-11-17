@@ -1,9 +1,13 @@
+import sys
 import ast
+import inspect
+from collections import defaultdict
 from itertools import count
+
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
     map, split, walk_keys, zipdict, merge, join, project, flip,
-    post_processing, unwrap, memoize, none
+    post_processing, unwrap, memoize, none, cached_property
 )
 
 
@@ -13,11 +17,13 @@ def introspect(func):
         func = import_func(func)
 
     func_name = _full_name(func)
-    consts = merge(get_closure(func), get_defaults(func), get_assignments(func))
+    consts = merge(get_defaults(func), get_assignments(func))
     consts_spec = walk_keys(lambda k: '%s.%s' % (func_name, k), consts)
+    consts_spec.update({'%s.%s' % (func.__module__, name): value
+                        for name, value in get_closure(func).items()})
 
     # Recurse
-    callables = filter(callable, consts.values())
+    callables = filter(callable, consts_spec.values())
     recurse_specs = (introspect(f) for f in callables)
     return merge(join(recurse_specs) or {}, consts_spec)
 
@@ -27,26 +33,87 @@ def lookup(func):
 
 
 def rebind(func, bindings):
-    if not bindings:
-        return func
     if isinstance(func, str):
         func = import_func(func)
 
-    tree = get_ast(func)
+    refs = set(bindings) | _get_refs(func)
 
-    # Rebind assignments and kwarg defaults
-    prefix = _full_name(func) + '.'
-    my_bindings, other_bindings = split_keys(lambda s: s.startswith(prefix), bindings)
-    local_bindings = walk_keys(lambda s: s[len(prefix):], my_bindings)
-    tree = ConstRewriter(local_bindings).visit(tree)
+    # Collect attrs to rebind and module dependencies
+    attrs = defaultdict(set)
+    deps = defaultdict(set)
+    for ref in refs:
+        module, attr = _resolve_ref(ref)
+        attrs[module].add(attr)
+        deps[module].update(_get_deps(attr))
 
-    # Recurse
+    # Rebind modules starting from most independent ones
+    rebound = {}
+    for module, module_deps in sorted(deps.items(), key=lambda (_, deps): len(deps)):
+        if not module_deps <= set(rebound) | {module}:
+            raise ImportError('Cyclic dependency while rebinding %s' % module.__name__)
+        rebound[module] = _rebind_module(module, bindings, attrs=attrs[module], rebound=rebound)
+
+    if func.__module__ in rebound:
+        return rebound[func.__module__][func.__name__]
+    else:
+        return func
+
+
+def _rebind_module(module, bindings, attrs=None, rebound=None):
+    rewriter = ConstRewriter(module, bindings)
+
+    global_vars = _rebound_globals(module, rebound)
+    global_vars.update(rewriter.local_bindings)
+
+    tree = ast.Module(body=[get_ast(f) for f in attrs if callable(f)])
+    tree = rewriter.visit(tree)
+    ast.fix_missing_locations(tree)
+    code = compile(tree, sys.modules[module].__file__, 'exec')
+
+    exec(code, global_vars)
+    return global_vars
+
+
+@post_processing(dict)
+def _rebound_globals(module, rebound):
+    for name, value in sys.modules[module].__dict__.items():
+        if inspect.ismodule(value):
+            yield rebound.get(value.__name__, value)
+        elif hasattr(value, '__module__') and value.__module__ in rebound:
+            yield getattr(rebound[value.__module__], name)
+        else:
+            yield name, value
+
+
+def _get_refs(func):
     closure = get_closure(func)
-    rebound_closure = {name: rebind(f, other_bindings) for name, f in closure.items()
-                       if callable(f) and f is not func}
-    local_bindings.update(rebound_closure)
+    deps = {func} | set(closure.values())
+    return {'%s.%s' % (f.__module__, f.__name__) for f in deps
+            if hasattr(f, '__module__') and hasattr(f, '__name__')}
 
-    return compile_func(func, tree, local_bindings)
+def _get_deps(value):
+    if isinstance(value, type):
+        raise NotImplementedError('Classes are not supported')
+    elif callable(value):
+        closure = get_closure(value)
+        return {f.__module__ for f in closure if hasattr(f, '__module__')} \
+            | {m.__name__ for m in closure if inspect.ismodule(m)}
+    else:
+        return set()  # constant
+
+def _resolve_ref(ref):
+    words = ref.split('.')
+    for tail in range(1, len(words)):
+        module_name = '.'.join(words[:-tail])
+        try:
+            module = import_module(module_name)
+        except ImportError:
+            pass
+        else:
+            attr = words[-tail]
+            return module.__name__, getattr(module, attr)
+    else:
+        raise ImportError('Failed to resolve %s' % ref)
 
 
 @post_processing(dict)
@@ -59,38 +126,52 @@ def _local_bindings(func, bindings):
 
 
 class ConstRewriter(ast.NodeTransformer):
-    def __init__(self, bindings):
+    def __init__(self, module, bindings):
         self.bindings = bindings
+        self.ns = module.split('.')
+
+    def push_scope(self, name):
+        self.ns.append(name)
+        if hasattr(self, 'local_bindings'):
+            del self.local_bindings
+
+    def pop_scope(self):
+        self.ns.pop()
+        if hasattr(self, 'local_bindings'):
+            del self.local_bindings
+
+    @cached_property
+    def local_bindings(self):
+        prefix = ''.join('%s.' % name for name in self.ns)
+        return {key[len(prefix):]: value for key, value in self.bindings.items()
+                if key.startswith(prefix)}
+
+    def visit_FunctionDef(self, node):
+        self.push_scope(node.name)
+        node = self.generic_visit(node)
+        self.pop_scope()
+        return node
 
     def visit_Assign(self, node):
         if not is_literal(node.value):
             return node
 
-        to_rebind = [isinstance(target, ast.Name) and target.id in self.bindings
+        to_rebind = [isinstance(target, ast.Name) and target.id in self.local_bindings
                      for target in node.targets]
         if none(to_rebind):
             return node
         if any(to_rebind) and len(node.targets) > 1:
             raise NotImplementedError('Rebinding in mass assignment is not supported')
 
-        node.value = literal_to_ast(self.bindings[node.targets[0].id])
+        node.value = literal_to_ast(self.local_bindings[node.targets[0].id])
         return node
 
     def visit_arguments(self, node):
         kwargs = node.args[len(node.args)-len(node.defaults):]
         for i, kwarg, default in zip(count(), kwargs, node.defaults):
-            if kwarg.id in self.bindings:
-                node.defaults[i] = literal_to_ast(self.bindings[kwarg.id])
+            if kwarg.id in self.local_bindings:
+                node.defaults[i] = literal_to_ast(self.local_bindings[kwarg.id])
         return node
-
-
-def compile_func(func, tree, bindings):
-    ast.fix_missing_locations(tree)
-    code = compile(tree, func_file(func), 'single')
-    global_vars = merge(func.__globals__, bindings)
-    local_vars = merge(_locals(func), bindings)
-    exec(code, global_vars, local_vars)
-    return local_vars[func.__name__]
 
 
 # Utilities
@@ -194,8 +275,6 @@ def literal_to_ast(value):
 
 # AST helpers
 
-import sys
-import inspect
 import textwrap
 
 
@@ -206,7 +285,7 @@ def get_ast(func):
 
     # Preserve line numbers
     source = '\n' * (func.__code__.co_firstlineno - 2) + source
-    return ast.parse(source, func_file(func), 'single')
+    return ast.parse(source, func_file(func), 'single').body[0]
 
 def func_file(func):
     return getattr(sys.modules[func.__module__], '__file__', '<nofile>')
@@ -217,14 +296,6 @@ def is_name(node, name):
 
 # Introspect enclosed
 
-def _locals(func):
-    if func.__closure__:
-        names = func.__code__.co_freevars
-        values = [cell.cell_contents for cell in func.__closure__]
-        return zipdict(names, values)
-    else:
-        return {}
-
 def _code_names(code):
     names = set()
     for cmd, param in code.code:
@@ -234,14 +305,10 @@ def _code_names(code):
             names.update(_code_names(param))
     return names
 
-def _globals(func):
+def get_closure(func):
     code = Code.from_code(func.__code__)
     names = _code_names(code)
     return project(func.__globals__, names)
-    # return merge(project(__builtins__, names), project(func.__globals__, names))
-
-def get_closure(func):
-    return merge(_globals(func), _locals(func))
 
 
 # To funcy
