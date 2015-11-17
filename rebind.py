@@ -6,7 +6,7 @@ from itertools import count
 
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
-    map, split, walk_keys, zipdict, merge, join, project, flip,
+    walk_keys, zipdict, merge, join, project, flip,
     post_processing, unwrap, memoize, none, cached_property
 )
 
@@ -116,15 +116,6 @@ def _resolve_ref(ref):
             return module.__name__, getattr(module, attr)
     else:
         raise ImportError('Failed to resolve %s' % ref)
-
-
-@post_processing(dict)
-def _local_bindings(func, bindings):
-    func_name = _full_name(func)
-    for spec, value in bindings.items():
-        spec_func, spec_var = spec.rsplit('.', 1)
-        if spec_func == func_name:
-            yield spec_var, value
 
 
 class ConstRewriter(ast.NodeTransformer):
@@ -320,10 +311,3 @@ def get_closure(func):
     code = Code.from_code(func.__code__)
     names = _code_names(code)
     return project(func.__globals__, names)
-
-
-# To funcy
-
-def split_keys(pred, coll):
-    yes, no = split(lambda (k, v): pred(k), coll.items())
-    return dict(yes), dict(no)
