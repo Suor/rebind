@@ -42,3 +42,20 @@ Rebind on the fly:
 
     # Recursively rebind g and f
     g2 = rebind(g, {'example.f.k': 11, 'example.g.alpha': 43})
+
+
+Lookup function code, file and line easily:
+
+.. code:: python
+
+    >>> print lookup(f)
+    # example.py:5
+    def g(x):
+        alpha = 42
+        return f(x, alpha)
+
+    >>> plookup('example.A.__init__')
+    # example.py:31
+        def __init__(self, x):
+            h = 3
+            self.prop = h * x
