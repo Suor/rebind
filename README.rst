@@ -1,11 +1,23 @@
 Rebind
 ======
 
-Inprospect hard-coded constants in a code and rebind them on the fly.
+Inprospect hard-coded constants in some messy code and rebind them on the fly.
+
+
+Installation
+------------
+
+::
+
+    pip install rebind
 
 
 Usage
 -----
+
+.. code:: python
+
+    from rebind import introspect, rebind, lookup, plookup
 
 Example code:
 

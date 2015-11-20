@@ -1,2 +1,2 @@
-byteplay==0.2
-funcy==1.6
+byteplay>=0.2
+funcy>=1.6
