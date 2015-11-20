@@ -226,6 +226,13 @@ def get_assignments(func):
                 yield target.id, value
 
 
+# AST helpers
+
+def get_ast(func):
+    source_lines, lineno = inspect.getsourcelines(func)
+    source = '\n' * (lineno - 1) + textwrap.dedent(''.join(source_lines))
+    return ast.parse(source, inspect.getfile(func), 'single').body[0]
+
 NAMED_CONSTS = {'None': None, 'True': True, 'False': False}
 CONST_NAMES = flip(NAMED_CONSTS)
 
@@ -276,14 +283,6 @@ def literal_to_ast(value):
         )
     else:
         raise ValueError("Can't convert %s to AST" % value)
-
-
-# AST helpers
-
-def get_ast(func):
-    source_lines, lineno = inspect.getsourcelines(func)
-    source = '\n' * (lineno - 1) + textwrap.dedent(''.join(source_lines))
-    return ast.parse(source, inspect.getfile(func), 'single').body[0]
 
 
 # Introspect enclosed
