@@ -30,7 +30,7 @@ def f3(x):
 class A(object):
     def __init__(self, x):
         h = 3
-        self.prop = h * x
+        self.prop = h * x * (beta / beta)
 
 
 def a(x):

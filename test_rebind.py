@@ -28,11 +28,11 @@ def test_mutual_recursion():
 
 def test_modules():
     assert introspect('mod2.m') == {'mod.f.k': 10, 'mod.f.n': 1, 'mod2.f': f}
-    assert rebind('mod2.m', {'mod2.f.k': 11})(0) == 11
+    assert rebind('mod2.m', {'mod.f.k': 11})(0) == 11
 
 
 def test_classes():
-    assert introspect('mod.A') == {'mod.A.__init__.h': 3}
+    assert introspect('mod.A') == {'mod.A.__init__.h': 3, 'mod.beta': 17}
     A = rebind('mod.A', {'mod.A.__init__.h': 4})
     assert A(1).prop == 4
     assert rebind('mod.a', {'mod.A.__init__.h': 4})(1) == 4

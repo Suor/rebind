@@ -18,7 +18,7 @@ def introspect(func):
 
     if isinstance(func, type):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
-        return join(introspect(meth) for _, meth in methods)
+        return join(introspect(meth) for _, meth in methods) or {}
 
     func_name = _full_name(func)
     consts = merge(get_defaults(func), get_assignments(func))
@@ -97,7 +97,7 @@ def _get_refs(func):
 
 def _get_deps(value):
     if callable(value):
-        closure = get_closure(value)
+        closure = get_closure(value).values()
         return {f.__module__ for f in closure if hasattr(f, '__module__')} \
             | {m.__name__ for m in closure if inspect.ismodule(m)}
     else:
@@ -306,7 +306,7 @@ def _code_names(code):
 def get_closure(func):
     if isinstance(func, type):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
-        return join(get_closure(meth.im_func) for _, meth in methods)
+        return join(get_closure(meth.im_func) for _, meth in methods) or {}
 
     code = Code.from_code(func.__code__)
     names = _code_names(code)
