@@ -29,7 +29,7 @@ def _introspect(func, seen):
 
     if isinstance(func, type):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
-        return join(_introspect(meth, seen) for _, meth in methods) or {}
+        return join(_introspect(meth, seen) for _, meth in methods if meth not in seen) or {}
 
     func_name = _full_name(func)
     consts = merge(get_defaults(func), get_assignments(func))
@@ -39,7 +39,7 @@ def _introspect(func, seen):
 
     # Recurse
     callables = filter(callable, consts_spec.values())
-    recurse_specs = (_introspect(f, seen) for f in set(callables) - seen)
+    recurse_specs = (_introspect(f, seen) for f in callables if f not in seen)
     return merge(join(recurse_specs) or {}, consts_spec)
 
 
