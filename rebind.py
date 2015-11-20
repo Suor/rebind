@@ -8,24 +8,26 @@ from itertools import count
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
     walk_keys, zipdict, merge, join, project, flip, ikeep,
-    post_processing, unwrap, memoize, none, cached_property, cut_prefix
+    post_processing, unwrap, none, cached_property, cut_prefix
 )
 
 
 __all__ = ('introspect', 'lookup', 'plookup', 'rebind')
 
 
-@memoize
 def introspect(func):
     if isinstance(func, str):
         func = import_func(func)
-
     if inspect.isbuiltin(func):
         return {}
+    return _introspect(func, set())
+
+def _introspect(func, seen):
+    seen.add(func)
 
     if isinstance(func, type):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
-        return join(introspect(meth) for _, meth in methods) or {}
+        return join(_introspect(meth, seen) for _, meth in methods) or {}
 
     func_name = _full_name(func)
     consts = merge(get_defaults(func), get_assignments(func))
@@ -35,7 +37,7 @@ def introspect(func):
 
     # Recurse
     callables = filter(callable, consts_spec.values())
-    recurse_specs = (introspect(f) for f in callables)
+    recurse_specs = (_introspect(f, seen) for f in set(callables) - seen)
     return merge(join(recurse_specs) or {}, consts_spec)
 
 
