@@ -20,6 +20,9 @@ def introspect(func):
     if isinstance(func, str):
         func = import_func(func)
 
+    if inspect.isbuiltin(func):
+        return {}
+
     if isinstance(func, type):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
         return join(introspect(meth) for _, meth in methods) or {}
