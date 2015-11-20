@@ -8,8 +8,11 @@ from itertools import count
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
     walk_keys, zipdict, merge, join, project, flip, ikeep,
-    post_processing, unwrap, memoize, none, cached_property
+    post_processing, unwrap, memoize, none, cached_property, cut_prefix
 )
+
+
+__all__ = ('introspect', 'lookup', 'plookup', 'rebind')
 
 
 @memoize
@@ -34,7 +37,24 @@ def introspect(func):
 
 
 def lookup(func):
-    pass
+    if isinstance(func, str):
+        ref = func
+        module, func = _resolve_ref(ref)
+        # Try to find class method
+        full_name = _full_name(func)
+        if full_name != ref:
+            attr = cut_prefix(ref, full_name).split('.')[0]
+            try:
+                func = getattr(func, attr)
+            except AttributeError:
+                pass
+
+    source_lines, lineno = inspect.getsourcelines(func)
+    source = ''.join(source_lines)
+    return '# %s:%d\n%s' % (inspect.getfile(func), lineno, source)
+
+def plookup(func):
+    print lookup(func)
 
 
 def rebind(func, bindings):
