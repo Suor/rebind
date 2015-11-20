@@ -1,4 +1,3 @@
-from datetime import datetime
 from rebind import introspect, rebind
 from mod import f, g, h
 
@@ -40,12 +39,14 @@ def test_classes():
 
 
 def test_builtin_dep():
+    from datetime import datetime
     assert introspect('mod.builtin_dep') == {'mod.datetime2': datetime}
     assert rebind('mod.builtin_dep', {'mod.datetime2': lambda *a: 1})() == 1
 
 
 def test_lineno():
-    import ast, inspect
+    import ast
+    import inspect
     from rebind import get_ast
 
     g_ast = get_ast(g)
