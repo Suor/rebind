@@ -1,3 +1,4 @@
+from datetime import datetime
 from rebind import introspect, rebind
 from mod import f, g, h
 
@@ -36,3 +37,8 @@ def test_classes():
     A = rebind('mod.A', {'mod.A.__init__.h': 4})
     assert A(1).prop == 4
     assert rebind('mod.a', {'mod.A.__init__.h': 4})(1) == 4
+
+
+def test_builtin_dep():
+    assert introspect('mod.builtin_dep') == {'mod.datetime2': datetime}
+    assert rebind('mod.builtin_dep', {'mod.datetime2': lambda *a: 1})() == 1

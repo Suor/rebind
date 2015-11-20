@@ -6,7 +6,7 @@ from itertools import count
 
 from byteplay import Code, LOAD_GLOBAL, LOAD_CONST
 from funcy import (
-    walk_keys, zipdict, merge, join, project, flip,
+    walk_keys, zipdict, merge, join, project, flip, ikeep,
     post_processing, unwrap, memoize, none, cached_property
 )
 
@@ -47,14 +47,20 @@ def rebind(func, bindings):
     deps = defaultdict(set)
     for ref in refs:
         module, attr = _resolve_ref(ref)
-        attrs[module].add(attr)
+        if getattr(attr, '__module__', None) == module:
+            attrs[module].add(attr)
         deps[module].update(_get_deps(attr))
 
     # Rebind modules starting from most independent ones
     rebound = {}
     for module, module_deps in sorted(deps.items(), key=lambda (_, deps): len(deps)):
+        # Not all dependencies satisfied, the only possibility - cyclic dependency
         if not module_deps <= set(rebound) | {module}:
-            raise ImportError('Cyclic dependency while rebinding %s' % module.__name__)
+            raise ImportError('Cyclic dependency while rebinding %s' % module)
+        # No need to actually rebind anything
+        if not (module_deps | {module}) & set(ikeep(r'^\w+', bindings)):
+            rebound[module] = sys.modules[module].__dict__
+            continue
         rebound[module] = _rebind_module(module, bindings, attrs=attrs[module], rebound=rebound)
 
     if func.__module__ in rebound:
@@ -82,9 +88,10 @@ def _rebind_module(module, bindings, attrs=None, rebound=None):
 def _rebound_globals(module, rebound):
     for name, value in sys.modules[module].__dict__.items():
         if inspect.ismodule(value):
-            yield rebound.get(value.__name__, value)
-        elif hasattr(value, '__module__') and value.__module__ in rebound:
-            yield getattr(rebound[value.__module__], name)
+            yield name, rebound.get(value.__name__, value)
+        elif hasattr(value, '__module__') and value.__module__ in rebound \
+                and hasattr(value, '__name__'):
+            yield name, rebound[value.__module__].get(value.__name__, value)
         else:
             yield name, value
 
@@ -112,8 +119,8 @@ def _resolve_ref(ref):
         except ImportError:
             pass
         else:
-            attr = words[-tail]
-            return module.__name__, getattr(module, attr)
+            attr = getattr(module, words[-tail])
+            return module.__name__, attr
     else:
         raise ImportError('Failed to resolve %s' % ref)
 
@@ -276,6 +283,7 @@ import textwrap
 
 
 def get_ast(func):
+    # TODO: use inspect findsource
     # Get function source
     source = inspect.getsource(func)
     source = textwrap.dedent(source)

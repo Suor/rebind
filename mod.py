@@ -35,3 +35,10 @@ class A(object):
 
 def a(x):
     return A(1).prop
+
+
+from datetime import datetime as datetime2
+
+def builtin_dep():
+    x = datetime2(2015, 11, 20)
+    return x
