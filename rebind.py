@@ -18,12 +18,14 @@ __all__ = ('introspect', 'lookup', 'plookup', 'rebind')
 def introspect(func):
     if isinstance(func, str):
         func = import_func(func)
-    if inspect.isbuiltin(func):
-        return {}
     return _introspect(func, set())
+
 
 def _introspect(func, seen):
     seen.add(func)
+
+    if inspect.isbuiltin(func) or not hasattr(func, '__module__') or not hasattr(func, '__name__'):
+        return {}
 
     if isinstance(func, type):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
