@@ -1,6 +1,12 @@
 Rebind
 ======
 
+Inprospect hard-coded constants in a code and rebind them on the fly.
+
+
+Usage
+-----
+
 Example code:
 
 .. code:: python
