@@ -1,6 +1,7 @@
 import sys
 import ast
 import inspect
+import textwrap
 from collections import defaultdict
 from itertools import count
 
@@ -279,25 +280,10 @@ def literal_to_ast(value):
 
 # AST helpers
 
-import textwrap
-
-
 def get_ast(func):
-    # TODO: use inspect findsource
-    # Get function source
-    source = inspect.getsource(func)
-    source = textwrap.dedent(source)
-
-    # Preserve line numbers
-    if hasattr(func, '__code__'):
-        source = '\n' * (func.__code__.co_firstlineno - 2) + source
-    elif hasattr(func, '__init__'):
-        source = '\n' * (func.__init__.im_func.__code__.co_firstlineno - 3) + source
-
-    return ast.parse(source, func_file(func), 'single').body[0]
-
-def func_file(func):
-    return getattr(sys.modules[func.__module__], '__file__', '<nofile>')
+    source_lines, lineno = inspect.getsourcelines(func)
+    source = '\n' * (lineno - 1) + textwrap.dedent(''.join(source_lines))
+    return ast.parse(source, inspect.getfile(func), 'single').body[0]
 
 
 # Introspect enclosed

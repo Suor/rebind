@@ -42,3 +42,15 @@ def test_classes():
 def test_builtin_dep():
     assert introspect('mod.builtin_dep') == {'mod.datetime2': datetime}
     assert rebind('mod.builtin_dep', {'mod.datetime2': lambda *a: 1})() == 1
+
+
+def test_lineno():
+    import ast, inspect
+    from rebind import get_ast
+
+    g_ast = get_ast(g)
+    g_code = compile(ast.Module(body=[g_ast]), inspect.getfile(g), 'exec')
+
+    context = {}
+    exec(g_code, context)
+    assert context['g'].__code__.co_firstlineno == g.__code__.co_firstlineno
