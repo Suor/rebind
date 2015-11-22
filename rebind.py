@@ -31,6 +31,9 @@ def _introspect(func, seen):
         methods = inspect.getmembers(func, predicate=inspect.ismethod)
         return join(_introspect(meth, seen) for _, meth in methods if meth not in seen) or {}
 
+    if not hasattr(func, '__defaults__') or not hasattr(func, '__code__'):
+        return {}
+
     func_name = _full_name(func)
     consts = merge(get_defaults(func), get_assignments(func))
     consts_spec = walk_keys(lambda k: '%s.%s' % (func_name, k), consts)
